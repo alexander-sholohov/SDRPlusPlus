@@ -153,7 +153,15 @@ private:
             return;
         }
 
-        SoapySDR::Device* dev = SoapySDR::Device::make(devArgs);
+        SoapySDR::Device* dev;
+        try {
+            dev = SoapySDR::Device::make(devArgs);
+        }
+        catch (const std::exception& e) {
+            flog::error("SoapyModule '{0}': Could not make SoapySDR device: {1}", this->name, e.what());
+            devId = -1;
+            return;
+        }
 
         antennaList = dev->listAntennas(SOAPY_SDR_RX, channelId);
         txtAntennaList = "";
@@ -307,7 +315,13 @@ private:
             return;
         }
 
-        _this->dev = SoapySDR::Device::make(_this->devArgs);
+        try {
+            _this->dev = SoapySDR::Device::make(_this->devArgs);
+        }
+        catch (const std::exception& e) {
+            flog::error("SoapyModule '{0}': Could not make SoapySDR device: {1}", _this->name, e.what());
+            return;
+        }
 
         _this->dev->setSampleRate(SOAPY_SDR_RX, _this->channelId, _this->sampleRate);
 
