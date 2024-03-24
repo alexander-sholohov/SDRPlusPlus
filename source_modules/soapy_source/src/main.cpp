@@ -32,6 +32,7 @@ public:
         //TODO: Make module tune on source select change (in sdrpp_core)
 
         uiGains = new float[1];
+        txtExtraDeviceArgs[0] = 0;
 
         refresh();
 
@@ -131,6 +132,13 @@ private:
         }
     }
 
+    SoapySDR::Kwargs makeEffectiveDeviceArgs() {
+        auto res = devArgs;
+        auto kwArgs = SoapySDR::KwargsFromString(extraDeviceArgs);
+        res.merge(kwArgs);
+        return res;
+    }
+
     void selectDevice(std::string name) {
         if (devList.size() == 0) {
             devId = -1;
@@ -153,7 +161,19 @@ private:
             return;
         }
 
-        SoapySDR::Device* dev = SoapySDR::Device::make(devArgs);
+        extraDeviceArgs.clear();
+        txtExtraDeviceArgs[0] = 0;
+        config.acquire();
+        if (config.conf["devices"].contains(name)) {
+            if (config.conf["devices"][name].contains("extraDeviceArgs")) {
+                extraDeviceArgs = config.conf["devices"][name]["extraDeviceArgs"];
+                strcpy(txtExtraDeviceArgs, extraDeviceArgs.c_str());
+            }
+        }
+        config.release();
+
+        auto effectiveDeviceArgs = makeEffectiveDeviceArgs();
+        SoapySDR::Device* dev = SoapySDR::Device::make(effectiveDeviceArgs);
 
         antennaList = dev->listAntennas(SOAPY_SDR_RX, channelId);
         txtAntennaList = "";
@@ -275,6 +295,7 @@ private:
 
     void saveCurrent() {
         json conf;
+        conf["extraDeviceArgs"] = extraDeviceArgs;
         conf["sampleRate"] = sampleRate;
         conf["antenna"] = uiAntennaId;
         int i = 0;
@@ -323,7 +344,8 @@ private:
             return;
         }
 
-        _this->dev = SoapySDR::Device::make(_this->devArgs);
+        auto effectiveDeviceArgs = _this->makeEffectiveDeviceArgs();
+        _this->dev = SoapySDR::Device::make(effectiveDeviceArgs);
 
         _this->dev->setSampleRate(SOAPY_SDR_RX, _this->channelId, _this->sampleRate);
 
@@ -419,6 +441,13 @@ private:
         if (SmGui::Button(CONCAT("Refresh##_dev_select_", _this->name))) {
             _this->refresh();
             _this->selectDevice(config.conf["device"]);
+        }
+
+        SmGui::LeftLabel("Device Args");
+        SmGui::FillWidth();
+        if (SmGui::InputText(CONCAT("##_device_args_", _this->name), _this->txtExtraDeviceArgs, 255)) {
+            _this->extraDeviceArgs = std::string(_this->txtExtraDeviceArgs);
+            _this->saveCurrent();
         }
 
         if (_this->running) { SmGui::EndDisabled(); }
@@ -619,6 +648,7 @@ private:
     float* uiGains;
     int channelCount = 1;
     int channelId = 0;
+    std::string extraDeviceArgs;
     int uiAntennaId = 0;
     std::vector<std::string> antennaList;
     std::string txtAntennaList;
@@ -630,6 +660,7 @@ private:
     SoapySDR::ArgInfoList settings;
     char stringSettingVal[1024];
     std::unordered_map<std::string, std::string> configSettings;
+    char txtExtraDeviceArgs[256];
 };
 
 MOD_EXPORT void _INIT_() {
