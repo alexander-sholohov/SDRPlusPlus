@@ -88,6 +88,7 @@ OmniRigCom::OmniRigCom(std::shared_ptr<InterchangeContext>& interchange_context,
 MyResult OmniRigCom::init() {
     HRESULT hr;
     hr = ::CoInitialize(NULL);
+
     ENSURE_HR_OK_RETURN_RES(hr, "CoInitialize error");
 
     hr = m_omniEngine.CoCreateInstance(__uuidof(OmniRigX));
@@ -101,7 +102,16 @@ MyResult OmniRigCom::init() {
     }
     ENSURE_HR_OK_RETURN_RES(hr, "OmniRig get_Rig error");
 
-    m_currentThreadId = GetCurrentThreadId();
+    long freq;
+    hr = m_rig->get_Freq(&freq);
+    ENSURE_HR_OK_RETURN_RES(hr, "OmniRig get_Freq error");
+
+    // set signal that we have initialized OmniRig COM Object
+    {
+        std::lock_guard<std::mutex> lck(m_init_mtx);
+        m_currentThreadId = GetCurrentThreadId();
+    }
+    m_init_notify.notify_all();
 
     return { true, "" };
 }
@@ -259,8 +269,23 @@ bool OmniRigCom::wasStopped() const {
     return m_was_stopped;
 }
 
+void OmniRigCom::wait_for_init() {
+    // wait 5 seconds max
+    const std::chrono::duration<int64_t, std::milli> timeout{ 5000LL };
+    auto pred = [&]() { return this->m_currentThreadId != 0; };
+    std::unique_lock<std::mutex> lck(m_init_mtx);
+    m_init_notify.wait_for(lck, timeout, pred);
+}
+
+bool OmniRigCom::is_initialized() const {
+    return m_currentThreadId != 0;
+}
+
+
 void OmniRigCom::stop() {
-    ::PostThreadMessage(m_currentThreadId, WM_QUIT, 0, 0);
+    if (m_currentThreadId != 0) {
+        ::PostThreadMessage(m_currentThreadId, WM_QUIT, 0, 0);
+    }
 }
 
 void OmniRigCom::setFrequency(long freq) {

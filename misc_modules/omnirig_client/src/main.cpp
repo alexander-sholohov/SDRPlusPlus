@@ -106,8 +106,9 @@ public:
     }
 
     void start() {
-        std::lock_guard<std::recursive_mutex> lck(mtx);
         if (running) { return; }
+
+        std::lock_guard<std::recursive_mutex> lck(mtx);
 
         // Switch source to panadapter mode
         if (usePanadapterMode) {
@@ -120,19 +121,23 @@ public:
     }
 
     void stop() {
-        std::lock_guard<std::recursive_mutex> lck(mtx);
         if (!running) { return; }
 
         {
             auto ctx = _interchange_ctx.lock();
             if (!ctx) {
-                flog::error("can't upgrade _interchange_ctx. unexpected sutuation");
+                flog::error("can't upgrade _interchange_ctx. unexpected situation");
                 return;
             }
             ctx->raise_flag_stop();
         }
 
-        _workerThread.join();
+        std::lock_guard<std::recursive_mutex> lck(mtx);
+        if (_workerThread.joinable()) {
+            flog::warn("_workerThread is joinable. before join");
+            _workerThread.join();
+            flog::warn("after join");
+        }
 
         // Switch source back to normal mode
         sigpath::sourceManager.onRetune.unbindHandler(&_retuneHandler);
@@ -142,7 +147,6 @@ public:
     }
 
     void refreshVFOs() {
-
         std::lock_guard lck(vfoMtx);
 
         vfoNamesTxt.clear();
@@ -203,6 +207,11 @@ public:
 
 
 private:
+    enum class SubStatus {
+        None,
+        Initializing,
+        Error,
+    };
     static void menuHandler(void* ctx) {
         OmniRIgClientModule* _this = (OmniRIgClientModule*)ctx;
         float menuWidth = ImGui::GetContentRegionAvail().x;
@@ -260,7 +269,15 @@ private:
             ImGui::TextColored(ImVec4(0.0, 1.0, 0.0, 1.0), "Running");
         }
         else {
-            ImGui::TextUnformatted("Idle");
+            if (_this->subStatus == SubStatus::Initializing) {
+                ImGui::TextColored(ImVec4(1.0, 1.0, 0.0, 1.0), "Initializing");
+            }
+            else if (_this->subStatus == SubStatus::Error) {
+                ImGui::TextColored(ImVec4(1.0, 0.0, 0.0, 1.0), "Error");
+            }
+            else {
+                ImGui::TextUnformatted("Idle");
+            }
         }
     }
 
@@ -269,6 +286,11 @@ private:
         if (!res.first) {
             flog::error("OmniRig init error: {0}", res.second.c_str());
             omni->setWasStopped(true);
+            return;
+        }
+
+        if (omni->wasStopped()) {
+            flog::warn("OmniRIg wasStopped signalled");
             return;
         }
 
@@ -282,12 +304,36 @@ private:
 
     static void _worker(OmniRIgClientModule* _this) {
 
+        _this->subStatus = SubStatus::Initializing;
+        // we protect section until "running" flag up
+        std::unique_lock<std::recursive_mutex> lck(_this->mtx);
+
         std::shared_ptr<omnirig::InterchangeContext> ctx(new omnirig::InterchangeContext());
         omnirig::OmniRigCom omniRigCom(ctx, _this->omniRigRadioIndex);
+
+        if (_this->running) {
+            flog::error("_this->running==true. How we appear here?");
+            return;
+        }
         _this->_interchange_ctx = ctx;
-        _this->running = true;
+
 
         auto omniThread = std::thread(_omni_rig_com_worker, _this, &omniRigCom);
+        omniRigCom.wait_for_init();
+        if (!omniRigCom.is_initialized()) {
+            _this->subStatus = SubStatus::Error;
+            flog::error("Unable to initialize _omni_rig_com_worker within reasonable time!");
+            omniRigCom.setWasStopped(true);
+            omniRigCom.stop();
+            omniThread.join();
+            _this->_workerThread.detach();
+            return;
+        }
+
+        _this->running = true;
+        _this->subStatus = SubStatus::None;
+        lck.unlock();
+
 
         flog::info("omnirig_client: worker started");
 
@@ -367,6 +413,7 @@ private:
     std::string name;
     bool enabled = true;
     bool running = false;
+    SubStatus subStatus = SubStatus::None;
     std::recursive_mutex mtx;
     //
     std::weak_ptr<omnirig::InterchangeContext> _interchange_ctx;

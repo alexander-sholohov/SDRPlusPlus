@@ -26,6 +26,9 @@ namespace omnirig {
         void setWasStopped(bool value);
         bool wasStopped() const;
 
+        void wait_for_init();
+        bool is_initialized() const;
+
     private:
         std::weak_ptr<InterchangeContext> m_ctx;
         int m_rig_number;
@@ -33,6 +36,8 @@ namespace omnirig {
         CComPtr<IRigX> m_rig;
         DWORD m_currentThreadId{};
         bool m_was_stopped{};
+        std::condition_variable m_init_notify;
+        std::mutex m_init_mtx;
 
     private:
         void processSDRToOmniMessage(WPARAM wParam, LPARAM lParam, MyResult& err_context);
