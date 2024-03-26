@@ -288,8 +288,9 @@ private:
             conf["agc"] = agc;
         }
         if (running) {
-            for (SoapySDR::ArgInfo argInfo : settings) {
-                std::string val = dev->readSetting(argInfo.key);;
+            for (const SoapySDR::ArgInfo& argInfo : settings) {
+                std::string val = dev->readSetting(argInfo.key);
+                ;
                 if (val != argInfo.value) { // only save non-default values
                     conf["settings"][argInfo.key] = val;
                 }
@@ -495,7 +496,7 @@ private:
             }
         }
 
-        for (SoapySDR::ArgInfo argInfo : _this->settings) {
+        for (const SoapySDR::ArgInfo& argInfo : _this->settings) {
             if (!_this->running)
                 break;
 
@@ -524,46 +525,53 @@ private:
                     _this->dev->writeSetting(argInfo.key, argInfo.options[selectedIdx]);
                     _this->saveCurrent();
                 }
-            } else if (argInfo.type == SoapySDR::ArgInfo::Type::BOOL) {
+            }
+            else if (argInfo.type == SoapySDR::ArgInfo::Type::BOOL) {
                 auto val = _this->dev->readSetting<bool>(argInfo.key);
                 if (SmGui::Checkbox((argInfo.name + guiName).c_str(), &val)) {
                     _this->dev->writeSetting<>(argInfo.key, val);
                     _this->saveCurrent();
                 }
-            } else if (argInfo.type == SoapySDR::ArgInfo::Type::INT) {
+            }
+            else if (argInfo.type == SoapySDR::ArgInfo::Type::INT) {
                 auto val = _this->dev->readSetting<int>(argInfo.key);
                 if (argInfo.range.minimum() != argInfo.range.maximum()) { // not an empty range
                     if (SmGui::SliderInt((argInfo.units + guiName).c_str(), &val, argInfo.range.minimum(), argInfo.range.maximum(), SmGui::FMT_STR_INT_DEFAULT)) {
                         _this->dev->writeSetting<>(argInfo.key, val);
                         _this->saveCurrent();
                     }
-                } else {
+                }
+                else {
                     if (SmGui::InputInt((argInfo.units + guiName).c_str(), &val)) {
                         _this->dev->writeSetting<>(argInfo.key, val);
                         _this->saveCurrent();
                     }
                 }
-            } else if (argInfo.type == SoapySDR::ArgInfo::Type::FLOAT) {
+            }
+            else if (argInfo.type == SoapySDR::ArgInfo::Type::FLOAT) {
                 auto val = _this->dev->readSetting<float>(argInfo.key);
                 if (argInfo.range.minimum() != argInfo.range.maximum()) { // not an empty range
                     if (SmGui::SliderFloatWithSteps((argInfo.units + guiName).c_str(), &val, argInfo.range.minimum(), argInfo.range.maximum(), argInfo.range.step(), SmGui::FMT_STR_FLOAT_DEFAULT)) {
                         _this->dev->writeSetting<>(argInfo.key, val);
                         _this->saveCurrent();
                     }
-                } else {
+                }
+                else {
                     if (SmGui::SliderFloat((argInfo.units + guiName).c_str(), &val, 0, 100, SmGui::FMT_STR_FLOAT_DEFAULT)) {
                         _this->dev->writeSetting<>(argInfo.key, val);
                         _this->saveCurrent();
                     }
                 }
-            } else if (argInfo.type == SoapySDR::ArgInfo::Type::STRING) {
+            }
+            else if (argInfo.type == SoapySDR::ArgInfo::Type::STRING) {
                 auto val = _this->dev->readSetting<std::string>(argInfo.key);
                 val.copy(_this->stringSettingVal, sizeof(_this->stringSettingVal));
                 if (SmGui::InputText((argInfo.units + guiName).c_str(), _this->stringSettingVal, sizeof(_this->stringSettingVal) - 1, SmGui::FMT_STR_FLOAT_DEFAULT)) {
                     _this->dev->writeSetting<>(argInfo.key, _this->stringSettingVal);
                     _this->saveCurrent();
                 }
-            } else {
+            }
+            else {
                 flog::warn("Unknown Soapy argument type: {0} for {1} ({2})", static_cast<int>(argInfo.type), argInfo.key.c_str(), argInfo.name.c_str());
                 continue;
             }
@@ -622,7 +630,6 @@ private:
     SoapySDR::ArgInfoList settings;
     char stringSettingVal[1024];
     std::unordered_map<std::string, std::string> configSettings;
-
 };
 
 MOD_EXPORT void _INIT_() {
