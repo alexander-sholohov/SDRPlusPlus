@@ -564,7 +564,7 @@ private:
                     _this->saveCurrent();
                 }
             } else {
-                spdlog::warn("Unknown Soapy argument type: {} for {} ({})", argInfo.type, argInfo.key, argInfo.name);
+                flog::warn("Unknown Soapy argument type: {0} for {1} ({2})", static_cast<int>(argInfo.type), argInfo.key.c_str(), argInfo.name.c_str());
                 continue;
             }
 
