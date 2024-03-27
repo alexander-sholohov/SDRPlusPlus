@@ -530,6 +530,12 @@ MOD_EXPORT void _INIT_() {
     defConf["devices"] = json({});
     config.load(defConf);
     config.enableAutoSave();
+
+#ifdef _WIN32
+    if (!SetEnvironmentVariable("SOAPY_SDR_PLUGIN_PATH", ".\\soapy_modules")) {
+        flog::error("SetEnvironmentVariable error");
+    }
+#endif
 }
 
 MOD_EXPORT ModuleManager::Instance* _CREATE_INSTANCE_(std::string name) {
